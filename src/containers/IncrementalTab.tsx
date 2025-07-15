@@ -13,42 +13,51 @@ const openai = new OpenAI({
   apiKey: 'sk-bb509f13ddf44ec1b539b30efcc5661a',
 });
 
-interface IncrementalTabProps {
-  state: {
-    messages: MessageItem[];
-    currentStage: ProcessStage;
-    uploadedFiles: Record<Role, File | null>;
-  };
-  updateState: (updater: (prev: TabState) => TabState) => void;
-  isLoading: boolean;
-  setIsLoading: (loading: boolean) => void;
-}
-
 const roleFlow: Role[] = ['user', 'pd', 'arch', 'proj', 'dev'];
 
-export default function IncrementalTab({ state, updateState, isLoading, setIsLoading }: IncrementalTabProps) {
+export default function IncrementalTab() {
   const messageRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
   const [completedRoles, setCompletedRoles] = useState<Role[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // 内部状态管理
+  const [state, setState] = useState<TabState>({
+    messages: [],
+    currentStage: { currentRole: 'user', editMode: 'none' },
+    uploadedFiles: {
+      user: null,
+      pd: null,
+      arch: null,
+      proj: null,
+      dev: null
+    }
+  });
+
+  const updateState = (updater: (prev: TabState) => TabState) => {
+    setState(prev => updater(prev));
+  };
 
   useEffect(() => {
-    const roles: Role[] = [];
-    let foundCurrent = false;
-    
-    for (const role of roleFlow) {
-      if (role === state.currentStage.currentRole) {
-        foundCurrent = true;
-        break;
+    if (state?.currentStage?.currentRole) {
+      const roles: Role[] = [];
+      let foundCurrent = false;
+      
+      for (const role of roleFlow) {
+        if (role === state.currentStage.currentRole) {
+          foundCurrent = true;
+          break;
+        }
+        roles.push(role);
       }
-      roles.push(role);
+      
+      setCompletedRoles(foundCurrent ? roles : []);
     }
-    
-    setCompletedRoles(foundCurrent ? roles : []);
-  }, [state.currentStage.currentRole]);
+  }, [state?.currentStage?.currentRole]);
 
   const handleRoleClick = (role: Role) => {
     if (!completedRoles.includes(role)) return;
   
-    const lastMessage = [...state.messages].reverse().find(msg => msg.role === role);
+    const lastMessage = [...(state?.messages || [])].reverse().find(msg => msg.role === role);
     
     if (lastMessage) {
       updateState(prev => ({
