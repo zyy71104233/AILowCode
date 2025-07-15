@@ -1,0 +1,93 @@
+/* 对话容器样式 */
+.container {
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background-color: white;
+  }
+  
+  /* 头部区域样式 */
+  .header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eaecef;
+  }
+  
+  .header h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #24292e;
+  }
+  
+  /* 头像样式 */
+  .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 12px;
+    object-fit: cover;
+  }
+  
+  /* 编辑区域样式 */
+  .editArea {
+    width: 100%;
+    min-height: 200px;
+    padding: 8px;
+    border: 1px solid #d1d5da;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  
+  /* 操作按钮区域 */
+  .actions {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+  }
+  
+  .actions button {
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+  }
+  
+  /* 确认按钮样式 */
+  .confirm {
+    background-color: #2ea44f;
+    color: white;
+    border: 1px solid rgba(27, 31, 35, 0.15);
+  }
+  
+  .confirm:hover {
+    background-color: #2c974b;
+  }
+  
+  /* 编辑按钮样式 */
+  .edit {
+    background-color: #fafbfc;
+    border: 1px solid rgba(27, 31, 35, 0.15);
+    color: #24292e;
+  }
+  
+  .edit:hover {
+    background-color: #f3f4f6;
+  }
+  
+  /* AI编辑按钮样式 */
+  .llm_edit {
+    background-color: #0366d6;
+    color: white;
+    border: 1px solid rgba(27, 31, 35, 0.15);
+  }
+  
+  .llm_edit:hover {
+    background-color: #0356b6;
+  }
