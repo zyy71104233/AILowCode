@@ -19,7 +19,7 @@ export default function CreateTab({ currentSession, onUpdateSessionState }: Crea
   const [completedRoles, setCompletedRoles] = useState<Role[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
-  // 默认状态
+  // 默认状态初始化函数
   const getDefaultState = (): TabState => ({
     messages: [],
     currentStage: { currentRole: 'user', editMode: 'none' },
@@ -48,13 +48,20 @@ export default function CreateTab({ currentSession, onUpdateSessionState }: Crea
     messagesLength: state.messages.length 
   });
 
+  // 统一的状态更新函数
+  // 负责更新本地状态和同步到会话管理器
+  // 只在消息数量、角色或编辑模式发生变化时才同步会话
   const updateState = (updater: (prev: TabState) => TabState) => {
-    // 获取当前最新的状态
     setState(prev => {
       const newState = updater(prev);
-      console.log('🔄 updateState - Previous state:', prev);
-      console.log('🔄 updateState - New state:', newState);
-      onUpdateSessionState(newState);
+      // 只在消息数量或角色发生变化时才更新session
+      if (
+        prev.messages.length !== newState.messages.length ||
+        prev.currentStage.currentRole !== newState.currentStage.currentRole ||
+        prev.currentStage.editMode !== newState.currentStage.editMode
+      ) {
+        onUpdateSessionState(newState);
+      }
       return newState;
     });
   };
@@ -101,7 +108,9 @@ export default function CreateTab({ currentSession, onUpdateSessionState }: Crea
     );
   }
 
-  // 辅助函数
+  // 获取AI角色函数
+  // 根据当前角色和promptType确定下一个AI回复的角色
+  // 如果是调整操作，保持当前角色；否则获取下一个角色
   const getAIRole = (currentRole: Role, promptType: PromptType): Role => {
     if (promptType.includes('_adjust')) {
       return currentRole; // 调整时保持当前角色
@@ -114,7 +123,19 @@ export default function CreateTab({ currentSession, onUpdateSessionState }: Crea
     return currentRole;
   };
 
+  // 获取下一个角色函数
+  // 处理角色流转逻辑
+  // 确认操作时进入下一角色，调整操作时保持当前角色
   const getNextRole = (currentRole: Role, promptType: PromptType): Role => {
+    console.log('🔄 getNextRole called:', {
+      currentRole,
+      promptType,
+      shouldProgress: promptType.endsWith('_confirm') && !promptType.includes('_adjust'),
+      nextRole: promptType.endsWith('_confirm') && !promptType.includes('_adjust') 
+        ? roleFlow[roleFlow.indexOf(currentRole) + 1] || currentRole 
+        : currentRole
+    });
+    
     // 如果是调整，保持当前角色
     if (promptType.includes('_adjust')) {
       return currentRole;
@@ -124,9 +145,18 @@ export default function CreateTab({ currentSession, onUpdateSessionState }: Crea
     const shouldProgress = promptType.endsWith('_confirm') && 
                          !promptType.includes('_adjust');
     
-    return shouldProgress ? roleFlow[roleFlow.indexOf(currentRole) + 1] || currentRole : currentRole;
+    const nextRole = shouldProgress ? roleFlow[roleFlow.indexOf(currentRole) + 1] || currentRole : currentRole;
+    console.log('Role transition:', {
+      from: currentRole,
+      to: nextRole,
+      promptType,
+      shouldProgress
+    });
+    return nextRole;
   };
 
+  // 角色点击处理函数
+  // 更新当前角色状态
   const handleRoleClick = (role: Role) => {
     updateState(prev => ({
       ...prev,
@@ -134,14 +164,27 @@ export default function CreateTab({ currentSession, onUpdateSessionState }: Crea
     }));
   };
 
-  // 主要发送函数
+  // 主要消息发送函数
+  // 处理消息发送、API调用和状态更新的核心逻辑
   const onSend = async (
     content: string, 
     promptType: PromptType, 
-    originalContent?: string
+    originalContent?: string,
+    options: { createUserMessage?: boolean } = { createUserMessage: true }
   ) => {
-    console.log('🚀 onSend called:', { content, promptType, originalContent });
+    console.log('🚀 onSend called:', { 
+      content: content.substring(0, 50) + '...',
+      promptType,
+      originalContent: originalContent?.substring(0, 50) + '...',
+      options,
+      currentState: {
+        currentRole: state.currentStage.currentRole,
+        editMode: state.currentStage.editMode,
+        messagesCount: state.messages.length
+      }
+    });
     
+    // 空内容或正在加载时不处理
     if (!content.trim() || isLoading) {
       console.log('onSend early return:', { contentEmpty: !content.trim(), isLoading });
       return;
@@ -150,66 +193,63 @@ export default function CreateTab({ currentSession, onUpdateSessionState }: Crea
     setIsLoading(true);
     
     try {
-      // 获取最新状态
-      const latestState = currentSession?.tabState || getDefaultState();
-      const currentRole = latestState.currentStage.currentRole;
+      // 生成消息ID和确定角色
       const timestamp = Date.now();
+      const [role, action] = promptType.split('_') as [Role, ActionType];
+      const messageRole = role;
+      const nextAiRole = getAIRole(messageRole, promptType);
       
+      console.log('📊 Role transition:', {
+        messageRole,
+        nextAiRole,
+        promptType,
+        action
+      });
+
+      // 创建消息ID
       const userMessageId = `user_${timestamp}`;
       const aiMessageId = `ai_${timestamp}`;
 
-      // 添加用户消息
-      const userMessage: MessageItem = {
-        id: userMessageId,
-        role: currentRole,
-        content,
-        showActions: false
-      };
+      // 只在需要时创建并添加用户消息
+      if (options.createUserMessage) {
+        const userMessage: MessageItem = {
+          id: userMessageId,
+          role: messageRole,
+          content,
+          showActions: false
+        };
 
-      console.log('📝 Adding user message');
-      console.log('Current state before update:', currentSession?.tabState);
-      updateState(prev => {
-        const newState = {
+        updateState(prev => ({
           ...prev,
           messages: [...prev.messages, userMessage]
-        };
-        console.log('New state after adding user message:', newState);
-        return newState;
-      });
+        }));
+      }
 
       // 获取提示词
-      const [role, action] = promptType.split('_') as [Role, ActionType];
-      console.log('Getting prompt for:', { role, action });   
-
       const { system, user: userPrompt } = getPrompt(role, action);
-
-      // 准备API内容      
       const apiContent = userPrompt.replace('{user_input}', content);
 
-      // 创建AI消息       
-      const aiRole = getAIRole(latestState.currentStage.currentRole, promptType);
+      // 创建并添加AI思考中消息
       const aiMessage: MessageItem = {
         id: aiMessageId,  
-        role: aiRole,     
+        role: nextAiRole,     
         content: '思考中...',
         showActions: false
       };
 
-      console.log('🤖 Adding AI message placeholder');
       updateState(prev => ({
         ...prev,
         messages: [...prev.messages, aiMessage]
       }));
 
-      // OpenAI 请求
-      console.log('🔥 Starting OpenAI stream');
-      
+      // 调用OpenAI API
       const openai = new OpenAI({
         baseURL: 'https://api.deepseek.com',
         apiKey: 'sk-bb509f13ddf44ec1b539b30efcc5661a',
         dangerouslyAllowBrowser: true
       });
 
+      // 创建流式请求
       const stream = await openai.chat.completions.create({
         model: "deepseek-chat",
         messages: [
@@ -219,53 +259,38 @@ export default function CreateTab({ currentSession, onUpdateSessionState }: Crea
         stream: true,
       });
 
+      // 流式更新AI回复内容
       let fullResponse = '';
-      console.log('=== STARTING STREAM ===');
-      
       for await (const chunk of stream) {
         const contentChunk = chunk.choices[0]?.delta?.content || "";
         fullResponse += contentChunk;
         
-        console.log('📝 Stream chunk received, fullResponse length:', fullResponse.length);
-        
-        updateState(prev => {
-          const newState = {
-            ...prev,
-            messages: prev.messages.map(msg => 
-              msg.id === aiMessageId 
-                ? { ...msg, content: fullResponse } 
-                : msg
-            )
-          };
-          return newState;
-        });
-      }
-
-      console.log('✅ OpenAI request completed. Final response length:', fullResponse.length);
-      console.log('📄 Final response content:', fullResponse);
-      
-      // 断点：检查API响应数据
-      // 完成后设置 showActions
-      updateState(prev => {
-        const newState = {
+        updateState(prev => ({
           ...prev,
-          messages: prev.messages.map(msg =>
-            msg.id === aiMessageId
-              ? { ...msg, showActions: true }
+          messages: prev.messages.map(msg => 
+            msg.id === aiMessageId 
+              ? { ...msg, content: fullResponse } 
               : msg
-          ),
-          currentStage: { 
-            ...prev.currentStage,
-            currentRole: getNextRole(prev.currentStage.currentRole, promptType)
-          }
-        };
-        console.log('📊 Final state after completion:', newState);
-        
-        
-        return newState;
-      });
+          )
+        }));
+      }
+      
+      // 完成后更新消息状态和角色
+      updateState(prev => ({
+        ...prev,
+        messages: prev.messages.map(msg =>
+          msg.id === aiMessageId
+            ? { ...msg, showActions: true }
+            : msg
+        ),
+        currentStage: { 
+          ...prev.currentStage,
+          currentRole: getNextRole(messageRole, promptType)  // 使用消息角色来计算下一个角色
+        }
+      }));
 
     } catch (error) {     
+      // 错误处理：更新失败消息
       console.error('=== onSend ERROR ===', error);
       updateState(prev => {
         const newState = {
@@ -284,6 +309,8 @@ export default function CreateTab({ currentSession, onUpdateSessionState }: Crea
     }
   };
 
+  // 消息编辑完成处理函数
+  // 更新编辑后的消息内容，并处理消息的显示状态
   const handleEditComplete = (newContent: string, messageId: string) => {
     updateState(prev => ({
       ...prev,

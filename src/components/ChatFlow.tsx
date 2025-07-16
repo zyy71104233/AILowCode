@@ -5,7 +5,12 @@ import DocumentationGenerator from './DocumentationGenerator';
 
 interface ChatFlowProps {
   messages: MessageItem[];
-  onSend: (content: string, promptType: PromptType, originalContent?: string) => void;
+  onSend: (
+    content: string, 
+    promptType: PromptType, 
+    originalContent?: string,
+    options?: { createUserMessage?: boolean }
+  ) => void;
   currentStage: ProcessStage;
   setCurrentStage: (stage: SetStateAction<ProcessStage>) => void;
   onEditComplete?: (newContent: string, messageId: string) => void;
@@ -21,6 +26,8 @@ const roleDisplayNames: Record<Role, string> = {
   proj: '项目经理',
   dev: '开发工程师'
 };
+
+const roleFlow: Role[] = ['user', 'pd', 'arch', 'proj', 'dev'];
 
 const ChatFlow: React.FC<ChatFlowProps> = ({ 
   messages,
@@ -254,6 +261,13 @@ const ChatFlow: React.FC<ChatFlowProps> = ({
 
   const handleAction = (action: ActionType, content: string) => {
     const promptType = getPromptType(action);
+    console.log('🎯 handleAction called:', { 
+      action, 
+      content: content.substring(0, 50) + '...',
+      promptType,
+      currentStage,
+      editMode: currentStage.editMode
+    });
 
     if (action === 'generateDoc') {
       handleGenerateDoc(content);
@@ -267,15 +281,15 @@ const ChatFlow: React.FC<ChatFlowProps> = ({
     } else if (action === 'edit') {
       setCurrentInput(content);
       setCurrentStage(prev => ({ ...prev, editMode: 'manual' }));
-    } else {
-      const isAdjustConfirm = currentStage.editMode === 'llm';
-      onSend(
-        isAdjustConfirm ? currentInput : content,
-        isAdjustConfirm ? getPromptType('adjust') : promptType,
-        isAdjustConfirm ? selectedMessageContent : undefined
-      );
+    } else if (action === 'confirm') {
+      console.log('🔄 Confirm action:', {
+        currentStage,
+        content: content.substring(0, 50) + '...',
+        promptType
+      });
+      // 修改这里，添加 createUserMessage: false 选项
+      onSend(content, promptType, undefined, { createUserMessage: false });
       setCurrentInput('');
-      setCurrentStage(prev => ({ ...prev, editMode: 'none' }));
     }
   };
 

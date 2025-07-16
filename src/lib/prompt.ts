@@ -86,6 +86,7 @@ const PROMPT_TEMPLATES: Record<string, PromptParts> = {
 
         ## action
         Follow instructions of nodes, generate output and make sure it follows the format example.
+        输出字符不超过20个
 
         `
   },
@@ -306,6 +307,7 @@ const PROMPT_TEMPLATES: Record<string, PromptParts> = {
 
           ## action
           Follow instructions of nodes, generate output and make sure it follows the format example.
+          输出字符不超过200个
           `
   },
 
