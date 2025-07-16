@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageItem, ProcessStage, PromptType, Role, SetStateAction, ActionType } from '../types/types';
 import DocumentationGenerator from './DocumentationGenerator';
-import JSON5 from 'json5';
 
 interface ChatFlowProps {
   messages: MessageItem[];
@@ -21,39 +20,6 @@ const roleDisplayNames: Record<Role, string> = {
   arch: '系统架构师',
   proj: '项目经理',
   dev: '开发工程师'
-};
-
-const roleMap: Record<Role, Record<ActionType, PromptType>> = {
-  pd: {
-    confirm: 'pd_confirm',
-    edit: 'pd_edit',
-    adjust: 'pd_adjust',
-    generateDoc: 'arch_confirm'
-  },
-  arch: {
-    confirm: 'arch_confirm',
-    edit: 'arch_edit',
-    adjust: 'arch_adjust',
-    generateDoc: 'arch_confirm'
-  },
-  proj: {
-    confirm: 'proj_confirm',
-    edit: 'proj_edit',
-    adjust: 'proj_adjust',
-    generateDoc: 'arch_confirm'
-  },
-  dev: {
-    confirm: 'dev_confirm',
-    edit: 'dev_edit',
-    adjust: 'dev_adjust',
-    generateDoc: 'arch_confirm'
-  },
-  user: {
-    confirm: 'user_confirm',
-    edit: 'pd_edit',
-    adjust: 'pd_adjust',
-    generateDoc: 'arch_confirm'
-  }
 };
 
 const ChatFlow: React.FC<ChatFlowProps> = ({ 
@@ -87,16 +53,46 @@ const ChatFlow: React.FC<ChatFlowProps> = ({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-
-
-  const getDefaultIncrementalPrompt = () => {
-    if (currentStage.currentRole === 'user' && tabType === 'incremental') {
-      return "基于需求文档，新增以下需求，回答内容不要包含上个迭代的需求，只包含本次迭代新增需求：1.xxxx 2.xxxx";
+  const roleMap: Record<Role, Record<ActionType, PromptType>> = {
+    user: {
+      confirm: 'user_confirm',
+      edit: 'user_confirm',
+      adjust: 'user_confirm',
+      generateDoc: 'user_confirm'
+    },
+    pd: {
+      confirm: 'pd_confirm',
+      edit: 'pd_edit',
+      adjust: 'pd_adjust',
+      generateDoc: 'pd_confirm'
+    },
+    arch: {
+      confirm: 'arch_confirm',
+      edit: 'arch_edit',
+      adjust: 'arch_adjust',
+      generateDoc: 'arch_confirm'
+    },
+    proj: {
+      confirm: 'proj_confirm',
+      edit: 'proj_edit',
+      adjust: 'proj_adjust',
+      generateDoc: 'proj_confirm'
+    },
+    dev: {
+      confirm: 'dev_confirm',
+      edit: 'dev_edit',
+      adjust: 'dev_adjust',
+      generateDoc: 'dev_confirm'
     }
-    return "";
   };
 
   const getPromptType = (actionType: ActionType): PromptType => {
+    console.log('🎯 getPromptType called:', { 
+      actionType, 
+      currentRole: currentStage.currentRole,
+      roleMapExists: !!roleMap,
+      promptType: roleMap[currentStage.currentRole]?.[actionType]
+    });
     return roleMap[currentStage.currentRole][actionType];
   };
 
@@ -111,46 +107,7 @@ const ChatFlow: React.FC<ChatFlowProps> = ({
   };
 
 
-  function parseComplexJson(jsonString: string): any {
-    // 预处理：保护需要保留的换行符
-    const protectedString = jsonString
-    .replace(/\\/g, '\\\\')  // 先转义已有的反斜杠
-    .replace(/\//g, '\\/')   // 转义斜杠（防止XSS）
-    .replace(/\n/g, '\\n')   // 转义未转义的换行符
-    .replace(/\r/g, '\\r')    // 转义未转义的回车符
-    .replace(/\t/g, '\\t')    // 转义未转义的制表符
-    .replace(/"/g, '\\"');    // 转义未转义的双引号
 
-    console.log("==== protectedString =====",protectedString)
-    
-    try {
-      const parsed = JSON.parse(protectedString);
-      
-      // 递归恢复特殊字符
-      const restoreSpecialChars = (obj: any): any => {
-        if (typeof obj === 'string') {
-          return obj
-            .replace(/\|\|NEWLINE\|\|/g, '\\n')
-            .replace(/\|\|TAB\|\|/g, '\\t');
-        }
-        if (Array.isArray(obj)) {
-          return obj.map(restoreSpecialChars);
-        }
-        if (typeof obj === 'object' && obj !== null) {
-          const result: Record<string, any> = {};
-          for (const key in obj) {
-            result[key] = restoreSpecialChars(obj[key]);
-          }
-          return result;
-        }
-        return obj;
-      };
-      
-      return restoreSpecialChars(parsed);
-    } catch (e) {
-      throw new Error(`JSON 解析失败: ${e}\n原始字符串片段: ${jsonString.slice(0, 100)}...`);
-    }
-  }
 
   const handleGenerateDoc = async (content: string) => {
     try {
@@ -322,18 +279,28 @@ const ChatFlow: React.FC<ChatFlowProps> = ({
     }
   };
 
-  const CONTENT = "1111"
   const handleSubmit = () => {
+    console.log('⚡ ChatFlow handleSubmit called');
+    console.log('📝 Current input:', currentInput);
+    console.log('🎭 Current stage:', currentStage);
 
-    // handleGenerateDoc(CONTENT);
-    // return
+    if (!currentInput.trim()) {
+      console.log('❌ Empty input, returning');
+      return;
+    }
 
-    if (!currentInput.trim()) return;
+    const promptType = currentStage.editMode === 'llm' 
+      ? getPromptType('adjust')
+      : getPromptType('confirm');
+    
+    console.log('🎯 Selected prompt type:', promptType);
 
     if (currentStage.editMode === 'llm') {
-      onSend(currentInput, getPromptType('adjust'), selectedMessageContent);
+      console.log('🤖 Sending LLM adjust message');
+      onSend(currentInput, promptType, selectedMessageContent);
     } else {
-      onSend(currentInput, getPromptType('confirm'));
+      console.log('✉️ Sending normal message');
+      onSend(currentInput, promptType);
     }
     
     setCurrentInput('');
@@ -346,6 +313,18 @@ const ChatFlow: React.FC<ChatFlowProps> = ({
     }
     return "请输入内容...";
   };
+
+  // 添加调试日志
+  console.log('ChatFlow render:', { 
+    messages, 
+    messagesLength: messages.length,
+    messageIds: messages.map(m => m.id),
+    messageContents: messages.map(m => ({ id: m.id, content: m.content.substring(0, 50) + '...' })),
+    currentStage 
+  });
+  
+  // 断点：检查ChatFlow接收到的props
+  
 
   return (
     <div className={`chat-flow ${tabType}`}>
