@@ -386,6 +386,8 @@ const handleOpenDirectory = async (path: string) => {
     }));
   };
 
+
+
   return (
     <div className="create-tab-container">
       <RoleWorkspace 
